@@ -1,0 +1,39 @@
+{
+  "name": "modeler-leveldb",
+  "version": "0.0.0",
+  "description": "leveldb-powered functional entity system",
+  "main": "index.js",
+  "dependencies": {
+    "level-sublevel": "~4.7.0",
+    "hydration": "~0.5.0",
+    "modeler": "~0.1.1"
+  },
+  "devDependencies": {
+    "mocha": "*",
+    "idgen": "~1.3.0",
+    "levelup": "~0.10.0",
+    "leveldown": "~0.6.1",
+    "rimraf": "~2.2.0"
+  },
+  "scripts": {
+    "test": "make test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/carlos8f/modeler-leveldb.git"
+  },
+  "homepage": "https://github.com/carlos8f/modeler-leveldb",
+  "keywords": [
+    "entity",
+    "model",
+    "orm",
+    "bacon"
+  ],
+  "author": "Carlos Rodriguez <carlos@s8f.org> (http://s8f.org/)",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "gitHead": "07725a6e725db3bd0eb39049f0329eb11b16eeb4",
+  "bugs": {
+    "url": "https://github.com/carlos8f/modeler-leveldb/issues"
+  }
+}
