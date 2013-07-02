@@ -24,9 +24,7 @@ module.exports = function (_opts) {
     function end () {
       if (ended) return;
       ended = true;
-      cb(null, entities.map(function (entity) {
-        return entity.id;
-      }));
+      cb(null, entities);
     }
   };
   api._save = function (entity, cb) {
