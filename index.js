@@ -41,6 +41,80 @@ module.exports = function (_opts) {
     })();
   }
 
+  var q = [], blocking = false;
+
+  // due to levelup's async nature, execution order can't be guaranteed. Here's
+  // a workaround to ensure that load and save calls respect call order.
+  function doNext () {
+    if (blocking || !q.length) return;
+
+    function unblock () {
+      blocking = false;
+      (typeof setImmediate === 'function' ? setImmediate : process.nextTick)(doNext);
+    }
+
+    blocking = true;
+    var args = q.shift(), op = args[0];
+
+    if (op === 'save') {
+      var entity = args[1], cb = args[2];
+      var batch = [];
+      entity.__idx || (entity.__idx = String(microtime.now()));
+      if (entity.rev === 1) {
+        batch.push({
+          type: 'put',
+          key: entity.id,
+          value: entity.__idx,
+          prefix: keys
+        });
+      }
+      try {
+        var data = hydration.dehydrate(entity);
+      }
+      catch (e) {
+        unblock();
+        return cb(e);
+      }
+      batch.push({
+        type: 'put',
+        key: entity.__idx,
+        value: data
+      });
+      objects.batch(batch, opts, function (err) {
+        unblock();
+        cb(err);
+      });
+    }
+    else if (op === 'load') {
+      var id = args[1], cb = args[2];
+      keys.get(id, opts, function (err, key) {
+        if (err && err.name === 'NotFoundError') err = null;
+        if (err) {
+          unblock();
+          return cb(err);
+        }
+        if (!key) {
+          unblock();
+          return cb(null, null);
+        }
+        objects.get(key, opts, function (err, data) {
+          unblock();
+          if (err && err.name === 'NotFoundError') err = null;
+          if (!data || err) {
+            return cb(null, null);
+          }
+          try {
+            var entity = hydration.hydrate(data);
+          }
+          catch (e) {
+            return cb(e);
+          }
+          cb(null, entity);
+        });
+      });
+    }
+  }
+
   api._head = function (offset, limit, cb) {
     continuable(offset, limit, false, cb);
   };
@@ -49,47 +123,12 @@ module.exports = function (_opts) {
   };
   // this dual key nonsense is necessary because leveldb sorts by key, not insertion order.
   api._save = function (entity, cb) {
-    var batch = [];
-    entity.__idx || (entity.__idx = String(microtime.now()));
-    var sortableId = entity.__idx + ':' + entity.id;
-    if (entity.rev === 1) {
-      batch.push({
-        type: 'put',
-        key: entity.id,
-        value: sortableId,
-        prefix: keys
-      });
-    }
-    try {
-      var data = hydration.dehydrate(entity);
-    }
-    catch (e) {
-      return cb(e);
-    }
-    batch.push({
-      type: 'put',
-      key: sortableId,
-      value: data
-    });
-    objects.batch(batch, opts, cb);
+    q.push(['save'].concat([].slice.call(arguments)));
+    doNext();
   };
   api._load = function (id, cb) {
-    keys.get(id, opts, function (err, key) {
-      if (err && err.name === 'NotFoundError') err = null;
-      if (err) return cb(err);
-      if (!key) return cb(null, null);
-      objects.get(key, opts, function (err, data) {
-        if (err && err.name === 'NotFoundError') err = null;
-        if (!data || err) return cb(null, null);
-        try {
-          var entity = hydration.hydrate(data);
-        }
-        catch (e) {
-          return cb(e);
-        }
-        cb(null, entity);
-      });
-    });
+    q.push(['load'].concat([].slice.call(arguments)));
+    doNext();
   };
   api._destroy = function (id, cb) {
     keys.get(id, opts, function (err, key) {
