@@ -7,34 +7,57 @@ module.exports = function (_opts) {
   var api = modeler(_opts);
 
   if (!api.options.db) throw new Error('must pass a levelup db with options.db');
-  var db = sublevel(api.options.db).sublevel(api.options.name);
+  var objects = sublevel(api.options.db).sublevel(api.options.name);
+  var keys = sublevel(api.options.db).sublevel(api.options.name + ':keys');
 
-  // this dual key nonsense is necessary because leveldb sorts by key, not insertion order.
+  var opts = {keyEncoding: 'utf8', valueEncoding: 'json'};
 
-  api._tail = function (limit, cb) {
-    var entities = [], ended = false;
-    db.createReadStream({reverse: true, keyEncoding: 'utf8', valueEncoding: 'json'})
-      .once('error', cb)
-      .on('data', function (data) {
-        if (!ended && !~data.key.indexOf('_key:')) entities.push(data.value);
-        if (entities.length === limit) end();
-      })
-      .on('end', end);
+  function continuable (offset, limit, reverse, cb) {
+    (function next () {
+      var chunk = [], counted = 0, ended = false;
+      var totalLimit = limit ? offset + limit : undefined;
+      objects.createValueStream({reverse: reverse, limit: totalLimit, keyEncoding: 'utf8', valueEncoding: 'json'})
+        .once('error', cb)
+        .on('data', function (data) {
+          try {
+            var entity = hydration.hydrate(data);
+          }
+          catch (e) {
+            ended = true;
+            return cb(e);
+          }
+          counted++;
+          if (!ended && counted > offset) chunk.push(entity);
+          if (chunk.length === limit) end();
+        })
+        .on('end', end);
 
-    function end () {
-      if (ended) return;
-      ended = true;
-      cb(null, entities);
-    }
+      function end () {
+        if (ended) return;
+        ended = true;
+        offset += chunk.length;
+        cb(null, chunk, next);
+      }
+    })();
+  }
+
+  api._head = function (offset, limit, cb) {
+    continuable(offset, limit, false, cb);
   };
+  api._tail = function (offset, limit, cb) {
+    continuable(offset, limit, true, cb);
+  };
+  // this dual key nonsense is necessary because leveldb sorts by key, not insertion order.
   api._save = function (entity, cb) {
     var batch = [];
+    entity.__idx || (entity.__idx = String(microtime.now()));
+    var sortableId = entity.__idx + ':' + entity.id;
     if (entity.rev === 1) {
-      entity.__idx = String(microtime.now());
       batch.push({
         type: 'put',
-        key: '_key:' + entity.id,
-        value: entity.__idx + ':' + entity.id
+        key: entity.id,
+        value: sortableId,
+        prefix: keys
       });
     }
     try {
@@ -45,17 +68,17 @@ module.exports = function (_opts) {
     }
     batch.push({
       type: 'put',
-      key: entity.__idx + ':' + entity.id,
+      key: sortableId,
       value: data
     });
-    db.batch(batch, {keyEncoding: 'utf8', valueEncoding: 'json'}, cb);
+    objects.batch(batch, opts, cb);
   };
   api._load = function (id, cb) {
-    db.get('_key:' + id, {keyEncoding: 'utf8', valueEncoding: 'json'}, function (err, key) {
+    keys.get(id, opts, function (err, key) {
       if (err && err.name === 'NotFoundError') err = null;
       if (err) return cb(err);
       if (!key) return cb(null, null);
-      db.get(key, {keyEncoding: 'utf8', valueEncoding: 'json'}, function (err, data) {
+      objects.get(key, opts, function (err, data) {
         if (err && err.name === 'NotFoundError') err = null;
         if (!data || err) return cb(null, null);
         try {
@@ -69,15 +92,15 @@ module.exports = function (_opts) {
     });
   };
   api._destroy = function (id, cb) {
-    db.get('_key:' + id, {keyEncoding: 'utf8', valueEncoding: 'json'}, function (err, key) {
+    keys.get(id, opts, function (err, key) {
       if (err && err.name === 'NotFoundError') err = null;
       if (err) return cb(err);
       if (!key) return cb();
 
-      db.batch([
-        {type: 'del', key: key},
-        {type: 'del', key: '_idx:' + id}
-      ], {keyEncoding: 'utf8'}, cb);
+      objects.batch([
+        {type: 'del', key: id, prefix: keys},
+        {type: 'del', key: key}
+      ], opts, cb);
     });
   };
 
