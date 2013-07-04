@@ -5,6 +5,24 @@ leveldb-powered functional entity system
 
 [![build status](https://secure.travis-ci.org/carlos8f/modeler-leveldb.png)](http://travis-ci.org/carlos8f/modeler-leveldb)
 
+### Usage
+
+Use `modeler-leveldb` just like `modeler`, but pass it a
+[levelup](https://github.com/rvagg/node-levelup) db:
+
+```js
+var modeler = require('modeler-redis')
+  , db = require('levelup')('/path/to/db')
+
+// create a collection
+var apples = modeler({
+  db: db, // must pass a levelup db here
+  name: 'apples', // keys will be prefixed by the collection name
+});
+```
+
+See [modeler](https://github.com/carlos8f/modeler) for the full API.
+
 - - -
 
 ### Developed by [Terra Eclipse](http://www.terraeclipse.com)
