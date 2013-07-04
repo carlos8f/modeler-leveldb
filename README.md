@@ -11,7 +11,7 @@ Use `modeler-leveldb` just like `modeler`, but pass it a
 [levelup](https://github.com/rvagg/node-levelup) db:
 
 ```js
-var modeler = require('modeler-redis')
+var modeler = require('modeler-leveldb')
   , db = require('levelup')('/path/to/db')
 
 // create a collection
