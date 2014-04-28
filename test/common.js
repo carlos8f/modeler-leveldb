@@ -7,7 +7,7 @@ rimraf = require('rimraf');
 var dbPath = '/tmp/modeler-leveldb-test-' + idgen();
 
 extraOptions = {
-  db: require('levelup')(dbPath)
+  db: require('level')(dbPath)
 };
 
 tearDown = function (done) {
