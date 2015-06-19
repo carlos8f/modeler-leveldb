@@ -1,6 +1,6 @@
 {
   "name": "modeler-leveldb",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "leveldb-powered functional entity system",
   "main": "index.js",
   "dependencies": {
